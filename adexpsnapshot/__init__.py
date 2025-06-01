@@ -29,7 +29,7 @@ from typing import List
 class ADExplorerSnapshot(object):
     OutputMode = Enum('OutputMode', ['BloodHound', 'Objects'])
 
-    def __init__(self, snapfile, outputfolder, log=None, snapshot_parser=None):
+    def __init__(self, snapfiles, outputfolder, log=None, snapshot_parser=None):
         self.log = log
         self.output = outputfolder
 
@@ -37,29 +37,32 @@ class ADExplorerSnapshot(object):
             from adexpsnapshot.parser.classes import Snapshot
             snapshot_parser = Snapshot
 
-        self.snap = snapshot_parser(snapfile, log=log)
+        self.snaps = []
+        for snapfile in snapfiles:
+            self.snaps.append(snapshot_parser(snapfile, log=log))
+            self.snap = self.snaps[-1]
 
-        self.snap.parseHeader()
+            self.snap.parseHeader()
 
-        if self.log:
-            filetimeiso = datetime.datetime.fromtimestamp(self.snap.header.filetimeUnix).isoformat()
-            self.log.info(f'Server: {self.snap.header.server}')
-            self.log.info(f'Time of snapshot: {filetimeiso}')
-            self.log.info('Mapping offset: 0x{:x}'.format(self.snap.header.mappingOffset))
-            self.log.info(f'Object count: {self.snap.header.numObjects}')
+            if self.log:
+                filetimeiso = datetime.datetime.fromtimestamp(self.snap.header.filetimeUnix).isoformat()
+                self.log.info(f'Server: {self.snap.header.server}')
+                self.log.info(f'Time of snapshot: {filetimeiso}')
+                self.log.info('Mapping offset: 0x{:x}'.format(self.snap.header.mappingOffset))
+                self.log.info(f'Object count: {self.snap.header.numObjects}')
 
-        self.snap.parseProperties()
-        self.snap.parseClasses()
-        self.snap.parseObjectOffsets()
+            self.snap.parseProperties()
+            self.snap.parseClasses()
+            self.snap.parseObjectOffsets()
 
-        self.sidcache = {}
-        self.dncache = CaseInsensitiveDict()
-        self.computersidcache = CaseInsensitiveDict()
-        self.domains = CaseInsensitiveDict()
-        self.objecttype_guid_map = CaseInsensitiveDict()
-        self.domaincontrollers = []
-        self.rootdomain = None
-        self.certtemplates = defaultdict(set)
+            self.snap.sidcache = {}
+            self.snap.dncache = CaseInsensitiveDict()
+            self.snap.computersidcache = CaseInsensitiveDict()
+            self.snap.domains = CaseInsensitiveDict()
+            self.snap.objecttype_guid_map = CaseInsensitiveDict()
+            self.snap.domaincontrollers = []
+            self.snap.rootdomain = None
+            self.snap.certtemplates = defaultdict(set)
 
     def outputObjects(self):
         import codecs, json, base64
@@ -101,7 +104,7 @@ class ADExplorerSnapshot(object):
 
             fh_out.close()
             result_q.task_done()
-            
+self.snap.cacheInfo
         wq = queue.Queue()
         results_worker = threading.Thread(target=write_worker, args=(wq, os.path.join(self.output, outputfile)))
         results_worker.daemon = True
@@ -126,19 +129,21 @@ class ADExplorerSnapshot(object):
             self.log.success(f"Output written to {outputfile}")
 
     def outputBloodHound(self):
-        self.preprocessCached()
+        for self.snap in self.snaps:
+            self.preprocessCached()
 
-        self.numUsers = 0
-        self.numGroups = 0
-        self.numComputers = 0
-        self.numTrusts = 0
-        self.numCertTemplates = 0
-        self.numCAs = 0
+            self.snap.numUsers = 0
+            self.snap.numGroups = 0
+            self.snap.numComputers = 0
+            self.snap.numTrusts = 0
+            self.snap.numCertTemplates = 0
+            self.snap.numCAs = 0
 
-        self.trusts = []
-        self.writeQueues = {}
+            self.snap.trusts = []
+            self.snap.writeQueues = {}
 
-        self.process()
+        for self.snap in self.snaps:
+            self.process()
 
     def preprocessCached(self):
         cacheFileName = hashlib.md5(f"{self.snap.header.filetime}_{self.snap.header.server}".encode()).hexdigest() + ".cache"
@@ -154,36 +159,36 @@ class ADExplorerSnapshot(object):
             if self.log:
                 self.log.success("Restored pre-processed information from data cache")
 
-            self.objecttype_guid_map = dico['guidmap']
-            self.sidcache = dico['sidcache']
-            self.dncache = dico['dncache']
-            self.computersidcache = dico['computersidcache']
-            self.domains = dico['domains']
-            self.domaincontrollers = dico['domaincontrollers']
-            self.rootdomain = dico['rootdomain']
-            self.certtemplates = dico['certtemplates']
+            self.snap.objecttype_guid_map = dico['guidmap']
+            self.snap.sidcache = dico['sidcache']
+            self.snap.dncache = dico['dncache']
+            self.snap.computersidcache = dico['computersidcache']
+            self.snap.domains = dico['domains']
+            self.snap.domaincontrollers = dico['domaincontrollers']
+            self.snap.rootdomain = dico['rootdomain']
+            self.snap.certtemplates = dico['certtemplates']
         else:
             self.preprocess()
 
             dico = {}
-            dico['guidmap'] = self.objecttype_guid_map
-            dico['sidcache'] = self.sidcache
-            dico['dncache'] = self.dncache
-            dico['computersidcache'] = self.computersidcache
-            dico['domains'] = self.domains
-            dico['domaincontrollers'] = self.domaincontrollers
-            dico['rootdomain'] = self.rootdomain
-            dico['certtemplates'] = self.certtemplates
+            dico['guidmap'] = self.snap.objecttype_guid_map
+            dico['sidcache'] = self.snap.sidcache
+            dico['dncache'] = self.snap.dncache
+            dico['computersidcache'] = self.snap.computersidcache
+            dico['domains'] = self.snap.domains
+            dico['domaincontrollers'] = self.snap.domaincontrollers
+            dico['rootdomain'] = self.snap.rootdomain
+            dico['certtemplates'] = self.snap.certtemplates
             dico['shelved'] = True
             Pickler(open(cachePath, "wb")).dump(dico)
 
     # build caches: guidmap, domains, forest_domains, computers
     def preprocess(self):
         for k,cl in self.snap.classes.items():
-            self.objecttype_guid_map[k] = str(cl.schemaIDGUID)
+            self.snap.objecttype_guid_map[k] = str(cl.schemaIDGUID)
 
         for k,idx in self.snap.propertyDict.items():
-            self.objecttype_guid_map[k] = str(self.snap.properties[idx].schemaIDGUID)
+            self.snap.objecttype_guid_map[k] = str(self.snap.properties[idx].schemaIDGUID)
 
         if self.log:
             prog = self.log.progress("Preprocessing objects", rate=0.1)
@@ -193,34 +198,34 @@ class ADExplorerSnapshot(object):
             # create sid cache
             objectSid = ADUtils.get_entry_property(obj, 'objectSid')
             if objectSid:
-                self.sidcache[str(objectSid)] = idx
+                self.snap.sidcache[str(objectSid)] = idx
 
             # create dn cache
             distinguishedName = ADUtils.get_entry_property(obj, 'distinguishedName')
             if distinguishedName:
-                self.dncache[str(distinguishedName)] = idx
+                self.snap.dncache[str(distinguishedName)] = idx
 
             # get domains
             if 'domain' in obj.classes:
-                if self.rootdomain is not None: # is it possible to find multiple?
+                if self.snap.rootdomain is not None: # is it possible to find multiple?
                     if self.log:
                         self.log.warn("Multiple domains in snapshot(?)")
                 else:
-                    self.rootdomain = str(distinguishedName)
-                    self.domains[str(distinguishedName)] = idx
+                    self.snap.rootdomain = str(distinguishedName)
+                    self.snap.domains[str(distinguishedName)] = idx
 
             # get forest domains
             if 'crossref' in obj.classes:
                 if ADUtils.get_entry_property(obj, 'systemFlags', 0) & 2 == 2:
                     ncname = ADUtils.get_entry_property(obj, 'nCName')
-                    if ncname and ncname not in self.domains:
-                        self.domains[str(ncname)] = idx
+                    if ncname and ncname not in self.snap.domains:
+                        self.snap.domains[str(ncname)] = idx
 
             # get computers
             if ADUtils.get_entry_property(obj, 'sAMAccountType', -1) == 805306369:
                 dnshostname = ADUtils.get_entry_property(obj, 'dNSHostname')
                 if dnshostname:
-                    self.computersidcache[str(dnshostname)] = str(objectSid)
+                    self.snap.computersidcache[str(dnshostname)] = str(objectSid)
 
             # get all cert templates
             if 'pkienrollmentservice' in obj.classes:
@@ -228,28 +233,28 @@ class ADExplorerSnapshot(object):
                 if ADUtils.get_entry_property(obj, 'certificateTemplates'):
                     templates = ADUtils.get_entry_property(obj, 'certificateTemplates')
                     for template in templates:
-                        self.certtemplates[str(template)].add(name)
+                        self.snap.certtemplates[str(template)].add(name)
 
             # get dcs
             if ADUtils.get_entry_property(obj, 'userAccountControl', 0) & 0x2000 == 0x2000:
-                self.domaincontrollers.append(idx)
+                self.snap.domaincontrollers.append(idx)
 
             if self.log and self.log.term_mode:
-                prog.status(f"{idx+1}/{self.snap.header.numObjects} ({len(self.sidcache)} sids, {len(self.computersidcache)} computers, {len(self.domains)} domains with {len(self.domaincontrollers)} DCs)")
+                prog.status(f"{idx+1}/{self.snap.header.numObjects} ({len(self.snap.sidcache)} sids, {len(self.snap.computersidcache)} computers, {len(self.snap.domains)} domains with {len(self.snap.domaincontrollers)} DCs)")
 
         if self.log:
-            prog.success(f"{len(self.sidcache)} sids, {len(self.computersidcache)} computers, {len(self.domains)} domains with {len(self.domaincontrollers)} DCs")
+            prog.success(f"{len(self.snap.sidcache)} sids, {len(self.snap.computersidcache)} computers, {len(self.snap.domains)} domains with {len(self.snap.domaincontrollers)} DCs")
 
     def process(self):
-        self.domainname = ADUtils.ldap2domain(self.rootdomain)
-        self.domain_object = self.snap.getObject(self.dncache[self.rootdomain])
-        self.domainsid = ADUtils.get_entry_property(self.domain_object, 'objectSid')
+        self.snap.domainname = ADUtils.ldap2domain(self.snap.rootdomain)
+        self.snap.domain_object = self.snap.getObject(self.snap.dncache[self.snap.rootdomain])
+        self.snap.domainsid = ADUtils.get_entry_property(self.snap.domain_object, 'objectSid')
 
         if self.log:
             prog = self.log.progress("Collecting data", rate=0.1)
 
         for ptype in ['users', 'computers', 'groups', 'domains', 'cert_bh', 'cert_ly4k_tpls', 'cert_ly4k_cas']:
-            self.writeQueues[ptype] = queue.Queue()
+            self.snap.writeQueues[ptype] = queue.Queue()
             btype = ptype
 
             if ptype.startswith("cert_"):
@@ -259,8 +264,8 @@ class ADExplorerSnapshot(object):
                     btype = "templates"
                 elif ptype.endswith("ly4k_cas"):
                     btype = "cas"
-            
-            results_worker = threading.Thread(target=OutputWorker.membership_write_worker, args=(self.writeQueues[ptype], btype, os.path.join(self.output, f"{self.snap.header.server}_{self.snap.header.filetimeUnix}_{ptype}.json")))
+self.snap.cacheInfo
+            results_worker = threading.Thread(target=OutputWorker.membership_write_worker, args=(self.snap.writeQueues[ptype], btype, os.path.join(self.output, f"{self.snap.header.server}_{self.snap.header.filetimeUnix}_{ptype}.json")))
             results_worker.daemon = True
             results_worker.start()
 
@@ -271,43 +276,43 @@ class ADExplorerSnapshot(object):
                     break
 
             if self.log and self.log.term_mode:
-                prog.status(f"{idx+1}/{self.snap.header.numObjects} ({self.numUsers} users, {self.numGroups} groups, {self.numComputers} computers, {self.numCertTemplates} certtemplates, {self.numCAs} CAs, {self.numTrusts} trusts)")
+                prog.status(f"{idx+1}/{self.snap.header.numObjects} ({self.snap.numUsers} users, {self.snap.numGroups} groups, {self.snap.numComputers} computers, {self.snap.numCertTemplates} certtemplates, {self.snap.numCAs} CAs, {self.snap.numTrusts} trusts)")
 
         if self.log:
-            prog.success(f"{self.numUsers} users, {self.numGroups} groups, {self.numComputers} computers, {self.numCertTemplates} certtemplates, {self.numCAs} CAs, {self.numTrusts} trusts")
+            prog.success(f"{self.snap.numUsers} users, {self.snap.numGroups} groups, {self.snap.numComputers} computers, {self.snap.numCertTemplates} certtemplates, {self.snap.numCAs} CAs, {self.snap.numTrusts} trusts")
 
         self.write_default_users()
         self.write_default_groups()
         self.processDomains()
 
         for ptype in ['users', 'computers', 'groups', 'domains', 'cert_bh', 'cert_ly4k_tpls', 'cert_ly4k_cas']:
-            self.writeQueues[ptype].put(None)
-            self.writeQueues[ptype].join()
+            self.snap.writeQueues[ptype].put(None)
+            self.snap.writeQueues[ptype].join()
 
         if self.log:
             self.log.success(f"Output written to {self.snap.header.server}_{self.snap.header.filetimeUnix}_*.json files")
 
     def processDomains(self):
-        level_id = ADUtils.get_entry_property(self.domain_object, 'msds-behavior-version', -1)
+        level_id = ADUtils.get_entry_property(self.snap.domain_object, 'msds-behavior-version', -1)
         try:
             functional_level = ADUtils.FUNCTIONAL_LEVELS[int(level_id)]
         except KeyError:
             functional_level = 'Unknown'
 
         domain = {
-            "ObjectIdentifier": ADUtils.get_entry_property(self.domain_object, 'objectSid'),
+            "ObjectIdentifier": ADUtils.get_entry_property(self.snap.domain_object, 'objectSid'),
             "Properties": {
-                "name": self.domainname.upper(),
-                "domain": self.domainname.upper(),
-                "domainsid": ADUtils.get_entry_property(self.domain_object, 'objectSid'),
-                "distinguishedname": ADUtils.get_entry_property(self.domain_object, 'distinguishedName'),
-                "description": ADUtils.get_entry_property(self.domain_object, 'description', ''),
+                "name": self.snap.domainname.upper(),
+                "domain": self.snap.domainname.upper(),
+                "domainsid": ADUtils.get_entry_property(self.snap.domain_object, 'objectSid'),
+                "distinguishedname": ADUtils.get_entry_property(self.snap.domain_object, 'distinguishedName'),
+                "description": ADUtils.get_entry_property(self.snap.domain_object, 'description', ''),
                 "functionallevel": functional_level,
-                "Machine Account Quota": ADUtils.get_entry_property(self.domain_object, 'ms-DS-MachineAccountQuota'),
+                "Machine Account Quota": ADUtils.get_entry_property(self.snap.domain_object, 'ms-DS-MachineAccountQuota'),
                 "highvalue": True,
                 "isaclprotected": False,
                 "collected": True,
-                "whencreated": ADUtils.get_entry_property(self.domain_object, 'whencreated', default=0)
+                "whencreated": ADUtils.get_entry_property(self.snap.domain_object, 'whencreated', default=0)
             },
             "Trusts": [],
             "Aces": [],
@@ -325,11 +330,11 @@ class ADExplorerSnapshot(object):
             "IsACLProtected": False
         }
 
-        aces = self.parse_acl(domain, 'domain', ADUtils.get_entry_property(self.domain_object, 'nTSecurityDescriptor', raw=True))
+        aces = self.parse_acl(domain, 'domain', ADUtils.get_entry_property(self.snap.domain_object, 'nTSecurityDescriptor', raw=True))
         domain['Aces'] = self.resolve_aces(aces)
-        domain['Trusts'] = self.trusts
+        domain['Trusts'] = self.snap.trusts
 
-        self.writeQueues["domains"].put(domain)
+        self.snap.writeQueues["domains"].put(domain)
 
     def processComputers(self, entry):
         if not ADUtils.get_entry_property(entry, 'sAMAccountType', -1) == 805306369:
@@ -357,8 +362,8 @@ class ADExplorerSnapshot(object):
             'DumpSMSAPassword': [],
             'Properties': {
                 'name': hostname.upper(),
-                'domainsid': self.domainsid,
-                'domain': self.domainname.upper(),
+                'domainsid': self.snap.domainsid,
+                'domain': self.snap.domainname.upper(),
                 'highvalue': False,
                 'distinguishedname': distinguishedName
             },
@@ -433,7 +438,7 @@ class ADExplorerSnapshot(object):
                 logging.warning('Invalid delegation target: %s', host)
                 continue
             try:
-                sid = self.computersidcache[target]
+                sid = self.snap.computersidcache[target]
                 delegateObj = {
                     "ObjectIdentifier":sid,
                     "ObjectType": self.resolve_sid(sid)['ObjectType']
@@ -463,8 +468,8 @@ class ADExplorerSnapshot(object):
         aces = self.parse_acl(computer, 'computer', ADUtils.get_entry_property(entry, 'nTSecurityDescriptor', raw=True))
         computer['Aces'] = self.resolve_aces(aces)
 
-        self.numComputers += 1
-        self.writeQueues["computers"].put(computer)
+        self.snap.numComputers += 1
+        self.snap.writeQueues["computers"].put(computer)
         return True
 
     def processCertTemplates(self, entry):
@@ -476,12 +481,12 @@ class ADExplorerSnapshot(object):
             return
 
         # Enable check if cert is under any CA (e.g. enabled)
-        enabled = name in self.certtemplates
+        enabled = name in self.snap.certtemplates
 
         object_identifier = ADUtils.get_entry_property(entry, 'objectGUID')
         validity_period = filetime_to_str(ADUtils.get_entry_property(entry, 'pKIExpirationPeriod'))
         renewal_period = filetime_to_str(ADUtils.get_entry_property(entry, 'pKIOverlapPeriod'))
-        
+self.snap.cacheInfo
         certificate_name_flag = ADUtils.get_entry_property(entry, 'msPKI-Certificate-Name-Flag', 0)
         certificate_name_flag = CertificateNameFlag(int(certificate_name_flag))
 
@@ -561,10 +566,10 @@ class ADExplorerSnapshot(object):
             'name': "%s@%s"
             % (
               ADUtils.get_entry_property(entry, "CN").upper(),
-              self.domainname.upper()
+              self.snap.domainname.upper()
             ),
             'type': 'Certificate Template',
-            'domain': self.domainname.upper(),
+            'domain': self.snap.domainname.upper(),
             'Template Name': ADUtils.get_entry_property(entry, 'CN'),
             'Display Name': ADUtils.get_entry_property(entry, 'displayName'),
             'Client Authentication': client_authentication,
@@ -578,29 +583,29 @@ class ADExplorerSnapshot(object):
             'Authorized Signatures Required': authorized_signatures_required,
             'Application Policies': application_policies,
             'Enabled': enabled,
-            'Certificate Authorities': list(self.certtemplates[name]),
-            },          
-            'ObjectIdentifier': object_identifier.lstrip("{").rstrip("}"), 
+            'Certificate Authorities': list(self.snap.certtemplates[name]),
+            },self.snap.cacheInfo
+            'ObjectIdentifier': object_identifier.lstrip("{").rstrip("}"),self.snap.cacheInfo
             'Aces': aces,
         }
 
-        self.numCertTemplates += 1
-        self.writeQueues["cert_bh"].put(certtemplate)
-        self.writeQueues["cert_ly4k_tpls"].put(certtemplate)
+        self.snap.numCertTemplates += 1
+        self.snap.writeQueues["cert_bh"].put(certtemplate)
+        self.snap.writeQueues["cert_ly4k_tpls"].put(certtemplate)
         return True
 
     def processCAs(self, entry):
         if not 'pkienrollmentservice' in entry.classes:
             return
-        
+self.snap.cacheInfo
         name = ADUtils.get_entry_property(entry, 'name')
         if not name:
             return
-        
+self.snap.cacheInfo
         object_identifier = ADUtils.get_entry_property(entry, 'objectGUID')
-        ca_name = ADUtils.get_entry_property(entry, 'cn') 
+        ca_name = ADUtils.get_entry_property(entry, 'cn')self.snap.cacheInfo
         dns_name = ADUtils.get_entry_property(entry, 'dNSHostName')
-       
+self.snap.cacheInfo
         subject_name = ADUtils.get_entry_property(entry, 'cACertificateDN')
 
         ca_certificate = x509.Certificate.load(
@@ -622,9 +627,9 @@ class ADExplorerSnapshot(object):
                     "name": "%s@%s"
                     % (
                         name.upper(),
-                        self.domainname.upper(),
+                        self.snap.domainname.upper(),
                     ),
-                    "domain": self.domainname.upper(),
+                    "domain": self.snap.domainname.upper(),
                     "type": "Enrollment Service",
                     "CA Name": ca_name,
                     "DNS Name": dns_name,
@@ -641,21 +646,21 @@ class ADExplorerSnapshot(object):
                 "Aces": aces,
             }
 
-        self.numCAs += 1
-        self.writeQueues["cert_bh"].put(cas)
-        self.writeQueues["cert_ly4k_cas"].put(cas)
+        self.snap.numCAs += 1
+        self.snap.writeQueues["cert_bh"].put(cas)
+        self.snap.writeQueues["cert_ly4k_cas"].put(cas)
         return True
 
     def processTrusts(self, entry):
         if 'trusteddomain' not in entry.classes:
             return
 
-        domtrust = ADDomainTrust(ADUtils.get_entry_property(entry, 'name'), ADUtils.get_entry_property(entry, 'trustDirection'), ADUtils.get_entry_property(entry, 'trustType'), 
+        domtrust = ADDomainTrust(ADUtils.get_entry_property(entry, 'name'), ADUtils.get_entry_property(entry, 'trustDirection'), ADUtils.get_entry_property(entry, 'trustType'),self.snap.cacheInfo
                                 ADUtils.get_entry_property(entry, 'trustAttributes'), ADUtils.get_entry_property(entry, 'securityIdentifier'))
-        
+self.snap.cacheInfo
         trust = domtrust.to_output()
-        self.numTrusts += 1
-        self.trusts.append(trust)
+        self.snap.numTrusts += 1
+        self.snap.trusts.append(trust)
         return True
 
     def processGroups(self, entry):
@@ -679,8 +684,8 @@ class ADExplorerSnapshot(object):
         group = {
             "ObjectIdentifier": sid,
             "Properties": {
-                "domain": self.domainname.upper(),
-                "domainsid": self.domainsid,
+                "domain": self.snap.domainname.upper(),
+                "domainsid": self.snap.domainsid,
                 "highvalue": is_highvalue(sid),
                 "name": resolved_entry['principal'],
                 "distinguishedname": distinguishedName,
@@ -691,7 +696,7 @@ class ADExplorerSnapshot(object):
             "IsACLProtected": False,
         }
         if sid in ADUtils.WELLKNOWN_SIDS:
-            group['ObjectIdentifier'] = '%s-%s' % (self.domainname.upper(), sid)
+            group['ObjectIdentifier'] = '%s-%s' % (self.snap.domainname.upper(), sid)
 
         group['Properties']['admincount'] = ADUtils.get_entry_property(entry, 'adminCount', default=0) == 1
         group['Properties']['description'] = ADUtils.get_entry_property(entry, 'description', '')
@@ -706,8 +711,8 @@ class ADExplorerSnapshot(object):
         aces = self.parse_acl(group, 'group', ADUtils.get_entry_property(entry, 'nTSecurityDescriptor', raw=True))
         group['Aces'] += self.resolve_aces(aces)
 
-        self.numGroups += 1
-        self.writeQueues["groups"].put(group)
+        self.snap.numGroups += 1
+        self.snap.writeQueues["groups"].put(group)
         return True
 
     def processUsers(self, entry):
@@ -737,7 +742,7 @@ class ADExplorerSnapshot(object):
             "Properties": {
                 "name": resolved_entry['principal'],
                 "domain": domain.upper(),
-                "domainsid": self.domainsid,
+                "domainsid": self.snap.domainsid,
                 "highvalue": False,
                 "distinguishedname": distinguishedName,
                 "unconstraineddelegation": ADUtils.get_entry_property(entry, 'userAccountControl', default=0) & 0x00080000 == 0x00080000,
@@ -753,7 +758,7 @@ class ADExplorerSnapshot(object):
 
         MembershipEnumerator.add_user_properties(user, entry)
 
-        if 'allowedtodelegate' in user['Properties']: 
+        if 'allowedtodelegate' in user['Properties']:self.snap.cacheInfo
             for host in user['Properties']['allowedtodelegate']:
                 try:
                     target = host.split('/')[1]
@@ -761,12 +766,12 @@ class ADExplorerSnapshot(object):
                     self.log.warn('Invalid delegation target: %s', host)
                     continue
                 try:
-                    sid = self.computersidcache[target]
+                    sid = self.snap.computersidcache[target]
                     delegateObj = {
                         "ObjectIdentifier":sid,
                         "ObjectType": self.resolve_sid(sid)['ObjectType']
                     }
-                    
+self.snap.cacheInfo
                     user['AllowedToDelegate'].append(delegateObj)
                 except KeyError:
                     self.log.warn('Unable to find sid for delegation target: %s', host)
@@ -797,8 +802,8 @@ class ADExplorerSnapshot(object):
         aces = self.parse_acl(user, 'user', ADUtils.get_entry_property(entry, 'nTSecurityDescriptor', raw=True))
         user['Aces'] += self.resolve_aces(aces)
 
-        self.numUsers += 1
-        self.writeQueues["users"].put(user)
+        self.snap.numUsers += 1
+        self.snap.writeQueues["users"].put(user)
         return True
 
     @functools.lru_cache(maxsize=4096)
@@ -811,11 +816,11 @@ class ADExplorerSnapshot(object):
             }
             # Is it a well-known sid?
             if ace['sid'] in ADUtils.WELLKNOWN_SIDS:
-                out['PrincipalSID'] = u'%s-%s' % (self.domainname.upper(), ace['sid'])
+                out['PrincipalSID'] = u'%s-%s' % (self.snap.domainname.upper(), ace['sid'])
                 out['PrincipalType'] = ADUtils.WELLKNOWN_SIDS[ace['sid']][1].capitalize()
             else:
                 try:
-                    entry = self.snap.getObject(self.sidcache[ace['sid']])
+                    entry = self.snap.getObject(self.snap.sidcache[ace['sid']])
                 except KeyError:
                     entry = {
                         'type': 'Unknown',
@@ -830,9 +835,9 @@ class ADExplorerSnapshot(object):
 
     # CacheInfo(hits=633024, misses=19340, maxsize=4096, currsize=4096)
     @functools.lru_cache(maxsize=4096)
-    def _parse_acl_cached(self, parselaps, entrytype, acl): 
-        fake_entry = {"Properties":{"haslaps": True if parselaps else False}} 
-        _, aces = parse_binary_acl(fake_entry, entrytype, acl, self.objecttype_guid_map)
+    def _parse_acl_cached(self, parselaps, entrytype, acl):self.snap.cacheInfo
+        fake_entry = {"Properties":{"haslaps": True if parselaps else False}}self.snap.cacheInfo
+        _, aces = parse_binary_acl(fake_entry, entrytype, acl, self.snap.objecttype_guid_map)
 
         # freeze result so we can cache it for resolve_aces function
         for i, ace in enumerate(aces):
@@ -840,9 +845,9 @@ class ADExplorerSnapshot(object):
         return frozenset(aces)
 
     def parse_acl(self, entry, entrytype, acl):
-        parselaps = entrytype == 'computer' and entry['Properties']['haslaps'] and "ms-mcs-admpwd" in self.objecttype_guid_map
+        parselaps = entrytype == 'computer' and entry['Properties']['haslaps'] and "ms-mcs-admpwd" in self.snap.objecttype_guid_map
         aces = self._parse_acl_cached(parselaps, entrytype, acl)
-        self.cacheInfo = self._parse_acl_cached.cache_info()
+        self.snap.cacheInfo = self._parse_acl_cached.cache_info()
         return aces
 
     # kinda useless I'm guessing as we're staying in the local domain?
@@ -851,12 +856,22 @@ class ADExplorerSnapshot(object):
         out = {}
         # Is it a well-known sid?
         if sid in ADUtils.WELLKNOWN_SIDS:
-            out['ObjectID'] = u'%s-%s' % (self.domainname.upper(), sid)
+            out['ObjectID'] = u'%s-%s' % (self.snap.domainname.upper(), sid)
             out['ObjectType'] = ADUtils.WELLKNOWN_SIDS[sid][1].capitalize()
         else:
+            entry = None
             try:
-                entry = self.snap.getObject(self.sidcache[sid])
+                entry = self.snap.getObject(self.snap.sidcache[sid])
             except KeyError:
+                for s in self.snaps:
+                    try:
+                        entry = s.getObject(s.sidcache[sid])
+                        break
+                    except KeyError:
+                        pass
+
+
+            if entry is None:
                 entry = {
                     'type': 'Unknown',
                     'principal':sid
@@ -869,9 +884,17 @@ class ADExplorerSnapshot(object):
 
     @functools.lru_cache(maxsize=2048)
     def get_membership(self, member):
+        entry = None
         try:
-            entry = self.snap.getObject(self.dncache[member])
+            entry = self.snap.getObject(self.snap.dncache[member])
         except KeyError:
+            for s in self.snaps:
+                try:
+                    entry = s.getObject(s.dncache[member])
+                    break
+                except KeyError:
+                    pass
+        if entry is None:
             return None
 
         resolved_entry = ADUtils.resolve_ad_entry(entry)
@@ -884,12 +907,12 @@ class ADExplorerSnapshot(object):
     def write_default_users(self):
         user = {
             "AllowedToDelegate": [],
-            "ObjectIdentifier": "%s-S-1-5-20" % self.domainname.upper(),
+            "ObjectIdentifier": "%s-S-1-5-20" % self.snap.domainname.upper(),
             "PrimaryGroupSID": None,
             "Properties": {
-                "domain": self.domainname.upper(),
-                "domainsid": self.domainsid,
-                "name": "NT AUTHORITY@%s" % self.domainname.upper(),
+                "domain": self.snap.domainname.upper(),
+                "domainsid": self.snap.domainsid,
+                "name": "NT AUTHORITY@%s" % self.snap.domainname.upper(),
                 "highvalue": False,
             },
             "Aces": [],
@@ -899,16 +922,16 @@ class ADExplorerSnapshot(object):
             "ContainedBy": None,
             "IsACLProtected": False,
         }
-        self.writeQueues["users"].put(user)
+        self.snap.writeQueues["users"].put(user)
 
 
     def write_default_groups(self):
         group = {
-            "ObjectIdentifier": "%s-S-1-5-9" % self.domainname.upper(),
+            "ObjectIdentifier": "%s-S-1-5-9" % self.snap.domainname.upper(),
             "Properties": {
-                "domain": self.domainname.upper(),
-                "domainsid": self.domainsid,
-                "name": "ENTERPRISE DOMAIN CONTROLLERS@%s" % self.domainname.upper()
+                "domain": self.snap.domainname.upper(),
+                "domainsid": self.snap.domainsid,
+                "name": "ENTERPRISE DOMAIN CONTROLLERS@%s" % self.snap.domainname.upper()
             },
             "ContainedBy": None,
             "Members": [],
@@ -918,7 +941,7 @@ class ADExplorerSnapshot(object):
             "ContainedBy": None
         }
 
-        for dc in self.domaincontrollers:
+        for dc in self.snap.domaincontrollers:
             entry = self.snap.getObject(dc)
             resolved_entry = ADUtils.resolve_ad_entry(entry)
             memberdata = {
@@ -927,15 +950,15 @@ class ADExplorerSnapshot(object):
             }
             group["Members"].append(memberdata)
 
-        self.writeQueues["groups"].put(group)
+        self.snap.writeQueues["groups"].put(group)
 
         # Everyone
         evgroup = {
-            "ObjectIdentifier": "%s-S-1-1-0" % self.domainname.upper(),
+            "ObjectIdentifier": "%s-S-1-1-0" % self.snap.domainname.upper(),
             "Properties": {
-                "domain": self.domainname.upper(),
-                "domainsid": self.domainsid,
-                "name": "EVERYONE@%s" % self.domainname.upper()
+                "domain": self.snap.domainname.upper(),
+                "domainsid": self.snap.domainsid,
+                "name": "EVERYONE@%s" % self.snap.domainname.upper()
             },
             "Members": [],
             "Aces": [],
@@ -943,15 +966,15 @@ class ADExplorerSnapshot(object):
             "IsACLProtected": False,
             "ContainedBy": None
         }
-        self.writeQueues["groups"].put(evgroup)
+        self.snap.writeQueues["groups"].put(evgroup)
 
         # Authenticated users
         augroup = {
-            "ObjectIdentifier": "%s-S-1-5-11" % self.domainname.upper(),
+            "ObjectIdentifier": "%s-S-1-5-11" % self.snap.domainname.upper(),
             "Properties": {
-                "domain": self.domainname.upper(),
-                "domainsid": self.domainsid,
-                "name": "AUTHENTICATED USERS@%s" % self.domainname.upper()
+                "domain": self.snap.domainname.upper(),
+                "domainsid": self.snap.domainsid,
+                "name": "AUTHENTICATED USERS@%s" % self.snap.domainname.upper()
             },
             "Members": [],
             "Aces": [],
@@ -959,15 +982,15 @@ class ADExplorerSnapshot(object):
             "IsACLProtected": False,
             "ContainedBy": None
         }
-        self.writeQueues["groups"].put(augroup)
+        self.snap.writeQueues["groups"].put(augroup)
 
         # Interactive
         iugroup = {
-            "ObjectIdentifier": "%s-S-1-5-4" % self.domainname.upper(),
+            "ObjectIdentifier": "%s-S-1-5-4" % self.snap.domainname.upper(),
             "Properties": {
-                "domain": self.domainname.upper(),
-                "domainsid": self.domainsid,
-                "name": "INTERACTIVE@%s" % self.domainname.upper()
+                "domain": self.snap.domainname.upper(),
+                "domainsid": self.snap.domainsid,
+                "name": "INTERACTIVE@%s" % self.snap.domainname.upper()
             },
             "Members": [],
             "Aces": [],
@@ -975,7 +998,7 @@ class ADExplorerSnapshot(object):
             "IsACLProtected": False,
             "ContainedBy": None
         }
-        self.writeQueues["groups"].put(iugroup)
+        self.snap.writeQueues["groups"].put(iugroup)
 
 
 
@@ -985,11 +1008,11 @@ class ADExplorerSnapshot(object):
 
         owner_sid = security.owner
         if owner_sid in ADUtils.WELLKNOWN_SIDS:
-            principal = u'%s-%s' % (self.domainname.upper(), owner_sid)
+            principal = u'%s-%s' % (self.snap.domainname.upper(), owner_sid)
             principal_type = ADUtils.WELLKNOWN_SIDS[owner_sid][1].capitalize()
         else:
             try:
-                entry = self.snap.getObject(self.sidcache[owner_sid])
+                entry = self.snap.getObject(self.snap.sidcache[owner_sid])
                 resolved_entry = ADUtils.resolve_ad_entry(entry)
                 principal_type = resolved_entry['type']
             except KeyError:
@@ -1013,11 +1036,11 @@ class ADExplorerSnapshot(object):
 
 
             if sid in ADUtils.WELLKNOWN_SIDS:
-                principal = u'%s-%s' % (self.domainname.upper(), sid)
+                principal = u'%s-%s' % (self.snap.domainname.upper(), sid)
                 principal_type = ADUtils.WELLKNOWN_SIDS[sid][1].capitalize()
             else:
                 try:
-                    entry = self.snap.getObject(self.sidcache[sid])
+                    entry = self.snap.getObject(self.snap.sidcache[sid])
                     resolved_entry = ADUtils.resolve_ad_entry(entry)
                     principal_type = resolved_entry['type']
                 except KeyError:
@@ -1069,11 +1092,11 @@ class ADExplorerSnapshot(object):
             principal_type = ""
 
             if sid in ADUtils.WELLKNOWN_SIDS:
-                principal = u'%s-%s' % (self.domainname.upper(), sid)
+                principal = u'%s-%s' % (self.snap.domainname.upper(), sid)
                 principal_type = ADUtils.WELLKNOWN_SIDS[sid][1].capitalize()
             else:
                 try:
-                    entry = self.snap.getObject(self.sidcache[sid])
+                    entry = self.snap.getObject(self.snap.sidcache[sid])
                     resolved_entry = ADUtils.resolve_ad_entry(entry)
                     principal_type = resolved_entry['type']
                 except KeyError:
@@ -1086,7 +1109,7 @@ class ADExplorerSnapshot(object):
                 standard_rights = list(rights["rights"])
             except:
                 standard_rights = rights["rights"].to_list()
-            
+self.snap.cacheInfo
 
             for right in standard_rights:
                 if not principal_type == "Computer":
@@ -1121,7 +1144,7 @@ def main():
 
     parser = argparse.ArgumentParser(add_help=True, description='AD Explorer snapshot ingestor for BloodHound', formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument('snapshot', type=argparse.FileType('rb'), help="Path to the snapshot .dat file.")
+    parser.add_argument('snapshot', type=argparse.FileType('rb'), help="Path to the snapshot .dat file.", nargs='+')
     parser.add_argument('-o', '--output', required=False, type=pathlib.Path, help="Path to the *.json output folder. Folder will be created if it doesn't exist. Defaults to the current directory.", default=".")
     parser.add_argument('-m', '--mode', required=False, help="The output mode to use. Besides BloodHound JSON output files, it is possible to dump all objects with all attributes to NDJSON. Defaults to BloodHound output mode.", choices=ADExplorerSnapshot.OutputMode.__members__, default='BloodHound')
 
@@ -1142,12 +1165,12 @@ def main():
         except:
             log.error(f"Unable to create output directory '{args.output}'.")
             return
-    
+self.snap.cacheInfo
     if not os.path.isdir(args.output):
         log.warn(f"Path '{args.output}' does not exist or is not a folder.")
         parser.print_help()
         return
-    
+self.snap.cacheInfo
     ades = ADExplorerSnapshot(args.snapshot, args.output, log)
 
     outputmode = ADExplorerSnapshot.OutputMode[args.mode]
